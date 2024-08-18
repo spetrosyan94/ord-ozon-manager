@@ -30,9 +30,6 @@ export class Channel {
   })
   status: EChannelStatus;
 
-  @Column({ default: 0 })
-  views: number;
-
   @Column()
   link: string;
 

@@ -38,7 +38,7 @@ export class OrdManagerService {
     private readonly ordOzonService: OrdOzonService,
   ) {}
 
-  // 1. Получить список креативов из ОРД и сопоставить с ерид токеном интеграций в БД
+  // 1. Получить список креативов из ОРД и сопоставить с Erid токеном интеграций в БД
   async getIntegrationsByOrdCreativeList(): Promise<IExtendedOrdIntegration[]> {
     const startIntegrationDate = '2024-01-01T00:00:00Z'; // Отчетная дата начала фильтрации интеграций по дате выпуска
     const endIntegrationDate = dayjs()
@@ -539,14 +539,10 @@ export class OrdManagerService {
       );
 
       // Если это первый месяц выпуска интеграции,
-      // то устанавливаем стоимость из суммы приложения в оплате деленную на количество интеграций,
+      // то устанавливаем стоимость из оплат
       // иначе все последующие месяцы, то устанавливаем стоимость в 0
       if (monthsSinceIntegration === 0) {
-        const price =
-          Math.round(
-            integration?.payment?.price /
-              integration?.payment?.integrations?.length,
-          ) || 0;
+        const price = integration?.payment?.price;
 
         integration.moneySpent = price;
         integration.unitCost = price;
@@ -567,18 +563,21 @@ export class OrdManagerService {
     return integrations;
   }
 
+  // TODO: Метод генерации просмотров требует доработки.
+  // В идеале сделать алгоритм, который берет общую сумму просмотров интеграции,
+  // и делит ее на количество интеграций, причем генерирует число просмотров для каждой интеграции в пределах общей суммы.
+
   // 6. Метод для расчета просмотров интеграций viewsFact и viewsPlan
   async calculateIntegrationViews(
     integrations: IExtendedOrdIntegration[],
   ): Promise<IExtendedOrdIntegration[]> {
-    const currentDate = dayjs(); // Текущая дата
+    // const currentDate = dayjs(); // Текущая дата
+
     // Множество ID интеграций, у которых в отсутствует просмотры views
     const missingViewsIds = new Set<number>();
     const negativeViewsIds = [];
 
     for (const integration of integrations) {
-      const reportMonthDate = dayjs(integration.dateStartFact);
-
       // Пропустить текущую интеграцию, если у нее отсутствуют просмотры
       if (!integration.views) {
         missingViewsIds.add(integration.id);
@@ -588,10 +587,11 @@ export class OrdManagerService {
         continue;
       }
 
+      const reportMonthDate = dayjs(integration.dateStartFact);
       // Новые просмотры интеграции за месяц
       let viewsCount = 0;
 
-      // Расчет просмотров в зависимости от даты выхода интеграции
+      // Рассчитываем даты для проверки за предыдущий месяц
       const previousMonthStart = reportMonthDate
         .subtract(1, 'month')
         .startOf('month');
@@ -615,13 +615,8 @@ export class OrdManagerService {
         .andWhere(`integrationId = :id`, { id: integration.id })
         .getOne();
 
-      console.log(`ЧТО НАЙДЕНО в предыдущем месяце`, previousMonthStatistic);
-      console.log(`ДАТА НАЧАЛЬНОГО МЕСЯЦА`, previousMonthStart);
-      console.log(`ДАТА КОНЕЧНОГО МЕСЯЦА`, previousMonthEnd);
-
-      // Если есть данные статистики просмотров за предыдущий месяц, вычитаем из актуальных просмотров интеграции сумму просмотров за прошлый месяц
-      // Соответственно имеем актуальную статистику просмотров интеграции
       if (previousMonthStatistic) {
+        // Если данные за прошлый месяц существуют, используем разницу между текущими просмотрами и viewsSum просмотрами предыдущего месяца
         viewsCount = integration.views - previousMonthStatistic.viewsSum;
 
         // Проверка, если интеграция имеет отрицательные просмотры
@@ -629,7 +624,26 @@ export class OrdManagerService {
           negativeViewsIds.push(integration.id);
         }
       } else {
-        viewsCount = integration.views;
+        // Если записи за прошлый месяц нет, а интеграция вышла больше месяца назад
+        const integrationStartDate = dayjs(
+          integration.integration_date,
+        ).startOf('month');
+        const integrationStartFact = dayjs(integration.dateStartFact);
+
+        const monthsSinceIntegration = integrationStartFact.diff(
+          integrationStartDate,
+          'month',
+        );
+
+        console.log('КОЛИЧЕСТВО МЕСЯЦЕВ СТАЛО', monthsSinceIntegration);
+
+        if (monthsSinceIntegration > 0) {
+          viewsCount = 0;
+        } else {
+          viewsCount = integration.views; // Все просмотры за первый месяц
+        }
+
+        // viewsCount = integration.views;
       }
 
       integration.viewsCountByFact = viewsCount;
@@ -715,14 +729,14 @@ export class OrdManagerService {
         comment: integration.comment || null,
 
         // Необязательное поле, нужно для тестирования. Проверить, какие интеграции отправляются в API ОРД
-        // integrationId: integration.id,
+        integrationId: integration.id,
       };
 
       statisticsToSend.push(statisticsToSendObject);
     }
 
     // return statisticsObjects;
-    return statisticsToSend;
+    // return statisticsToSend;
 
     // Внутри транзакции сначала отправляем данные в API ОРД, затем сохраняем их в БД
     return this.ordIntegrationRepository.manager

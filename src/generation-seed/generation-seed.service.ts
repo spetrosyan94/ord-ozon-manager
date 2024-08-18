@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   EChannelStatus,
@@ -14,6 +14,7 @@ import * as dayjs from 'dayjs';
 import * as timezone from 'dayjs/plugin/timezone';
 import * as utc from 'dayjs/plugin/utc';
 import { mockCreatives } from 'src/mock/mock-creatives';
+import { OrdIntegration } from 'src/database/entities/ordIntegration/OrdIntegration.entity';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
@@ -26,6 +27,8 @@ export class GenerationSeedService {
     private readonly paymentRepository: Repository<Payment>,
     @InjectRepository(Integration)
     private readonly integrationRepository: Repository<Integration>,
+    @InjectRepository(OrdIntegration)
+    private readonly ordIntegrationRepository: Repository<OrdIntegration>,
   ) {}
 
   async seedDataChannels(): Promise<void> {
@@ -34,42 +37,36 @@ export class GenerationSeedService {
         name: 'Бобр Добр',
         type: EChannelTypes.YOUTUBE,
         status: EChannelStatus.RELEASED,
-        views: 50000,
         link: 'https://youtube.com/BoberKurwa',
       },
       {
         name: 'Смешные утята',
         type: EChannelTypes.TELEGRAM,
         status: EChannelStatus.TO_WORK,
-        views: 30000,
         link: 'https://t.me/DucksAndDucks',
       },
       {
         name: 'Санта-барбара',
         type: EChannelTypes.VK_VIDEO,
         status: EChannelStatus.RELEASED,
-        views: 45000,
-        link: 'https://vk-video.com/channel3',
+        link: 'https://vk-video.com/santaBarbara',
       },
       {
         name: 'Плюс +15000',
         type: EChannelTypes.TELEGRAM,
         status: EChannelStatus.TO_WORK,
-        views: 35000,
         link: 'https://t.me/plus15000',
       },
       {
         name: 'Сваты онлайн',
         type: EChannelTypes.VK_VIDEO,
         status: EChannelStatus.RELEASED,
-        views: 60000,
         link: 'https://vk-video.com/SVATY_ONLINE',
       },
       {
         name: 'MR BEAST',
         type: EChannelTypes.YOUTUBE,
         status: EChannelStatus.RELEASED,
-        views: 25000,
         link: 'https://youtube.com/mrbeast',
       },
     ];
@@ -153,18 +150,30 @@ export class GenerationSeedService {
 
   // Генерация случайной даты за текущий год
   private getRandomDateThisYear(): Date {
-    const now = dayjs();
-    const startOfYear = now.startOf('year');
-    const endOfYear = now.endOf('year');
+    // const now = dayjs();
+    // const startOfYear = now.startOf('year');
+    // const endOfYear = now.endOf('year');
 
-    // Разница во времени в миллисекундах между началом года и текущей датой
-    const timeRange = endOfYear.get('second') - startOfYear.get('second');
+    // // Разница во времени в миллисекундах между началом года и текущей датой
+    // const timeRange = endOfYear.get('second') - startOfYear.get('second');
+
+    // // Генерация случайного числа в пределах этого диапазона
+    // const randomTime = Math.random() * timeRange;
+
+    // // Создаем новую дату, добавляя случайное время к началу года
+    // return startOfYear.add(randomTime, 'second').toDate();
+
+    const startOfYear2024 = dayjs('2024-01-01T00:00:00Z');
+    const endOfYear2024 = dayjs('2024-12-31T23:59:59Z');
+
+    // Разница во времени в миллисекундах между началом и концом 2024 года
+    const timeRange = endOfYear2024.diff(startOfYear2024, 'millisecond');
 
     // Генерация случайного числа в пределах этого диапазона
     const randomTime = Math.random() * timeRange;
 
-    // Создаем новую дату, добавляя случайное время к началу года
-    return startOfYear.add(randomTime, 'second').toDate();
+    // Создаем новую дату, добавляя случайное время к началу 2024 года
+    return startOfYear2024.add(randomTime, 'millisecond').toDate();
   }
 
   // Генерация сидов
@@ -174,5 +183,21 @@ export class GenerationSeedService {
     await this.seedDataPayments();
     await this.seedDataIntegrations();
     console.log('Сиды успешно созданы');
+  }
+
+  // Метод для удаления всех данных из таблиц
+  async clearAllData(): Promise<void> {
+    try {
+      await this.ordIntegrationRepository.delete({});
+      await this.integrationRepository.delete({});
+      await this.paymentRepository.delete({});
+      await this.channelRepository.delete({});
+      console.log(
+        'Все данные из таблиц Integrations, Payments, Channels, OrdIntegrations успешно удалены',
+      );
+    } catch (err) {
+      console.error('Ошибка при удалении данных из таблиц', err);
+      throw new InternalServerErrorException('Ошибка при очистке базы данных');
+    }
   }
 }
