@@ -729,18 +729,21 @@ export class OrdManagerService {
         comment: integration.comment || null,
 
         // Необязательное поле, нужно для тестирования. Проверить, какие интеграции отправляются в API ОРД
-        integrationId: integration.id,
+        // integrationId: integration.id,
       };
 
       statisticsToSend.push(statisticsToSendObject);
     }
 
-    // return statisticsObjects;
-    // return statisticsToSend;
+    // TODO: При тестировании отправки запросов, можно увидеть, что будет отправлено в ОРД Озон, а что сохранено в локальную БД
+    // return statisticsObjects; // То что будет сохранено в БД
+    // return statisticsToSend; // То что будет отправлено в ОРД Озон
 
     // Внутри транзакции сначала отправляем данные в API ОРД, затем сохраняем их в БД
     return this.ordIntegrationRepository.manager
       .transaction(async (transactionalEntityManager) => {
+        // TODO: Для проверки работы метода в тестовом режиме, метод отправки в Озон createStatistics можно закомментировать, так как чаще всего будет ошибка(отсутствуют креативы в ОРД Озон и прочее)
+
         // Отправляем созданный объект статистики в API ОРД
         await this.ordOzonService.createStatistics(statisticsToSend);
 
@@ -763,7 +766,7 @@ export class OrdManagerService {
   }
 
   // Общий метод для обработки,преобразования и сохранения преобразованных данных интеграций в БД
-  async processOrdIntegrations() {
+  async processOrdIntegrations(): Promise<OrdIntegration[]> {
     // Шаг 1. Получить список креативов из ОРД и сопоставить с Erid токеном интеграций в БД
     const integrations = await this.getIntegrationsByOrdCreativeList();
 
